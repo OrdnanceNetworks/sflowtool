@@ -31,7 +31,7 @@ AC_HEADER_TIME
 AC_FUNC_SELECT_ARGTYPES
 AC_FUNC_STRFTIME
 AC_FUNC_VPRINTF
-AC_CHECK_FUNCS([getaddrinfo memset select socket strdup strerror strspn strtol])
+AC_CHECK_FUNCS([getaddrinfo memset select socket strdup strerror strspn strtok strtol])
 
 AC_CONFIG_FILES([Makefile
                  src/Makefile])

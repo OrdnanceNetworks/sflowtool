@@ -187,6 +187,13 @@ typedef union _SFSockAddr {
   struct sockaddr_in6 sa6;
 } SFSockAddr;
 
+typedef struct _SFAgentIPFilterList {
+  int type;
+  int n_addrs;
+#define FILTER_MAX_AGENTIP 16
+  SFLAddress addrs[FILTER_MAX_AGENTIP];
+} SFAgentIPFilterList;
+
 typedef enum { SFLFMT_FULL=0, SFLFMT_PCAP, SFLFMT_LINE, SFLFMT_LINE_CUSTOM, SFLFMT_NETFLOW, SFLFMT_FWD, SFLFMT_CLF, SFLFMT_SCRIPT, SFLFMT_JSON } EnumSFLFormat;
 
 #define SA_MAX_PCAP_PKT 65536
@@ -249,6 +256,10 @@ typedef struct _SFConfig {
 
   /* Filtering */
   int sampleFiltering;
+
+  /* Agent IP filtering */
+  int gotAgentIPFilter;
+  SFAgentIPFilterList agentIPFilter;
 
   /* vlan filtering */
   int gotVlanFilter;
@@ -1135,9 +1146,38 @@ int sampleFilterOK(SFSample *sample)
      vlan was not reported in an SFLExtended_Switch struct, but was only picked up from the 802.1q header
      then the out_vlan will be 0,  so to be sure you are rejecting vlan 1,  you may need to reject both
      vlan 0 and vlan 1. */
-  return(sfConfig.gotVlanFilter == NO
-	 || sfConfig.vlanFilter[sample->s.in_vlan]
-	 || sfConfig.vlanFilter[sample->s.out_vlan]);
+  if(sfConfig.gotVlanFilter == YES) {
+    if(!sfConfig.vlanFilter[sample->s.in_vlan] &&
+       !sfConfig.vlanFilter[sample->s.out_vlan])
+      return NO;
+  }
+
+  if(sfConfig.gotAgentIPFilter == YES) {
+    SFLAddress *sa = &sample->agent_addr;
+    int i, n_addrs = sfConfig.agentIPFilter.n_addrs;
+
+    for(i = 0; i < n_addrs; i++) {
+      SFLAddress *fa = &sfConfig.agentIPFilter.addrs[i];
+
+      if(fa->type == sa->type &&
+	 !memcmp(&fa->address, &sa->address,
+		 (fa->type == SFLADDRESSTYPE_IP_V6 ? 16 : 4))) {
+	if(sfConfig.agentIPFilter.type) {
+	  /* include */
+	  break;
+	}
+	else {
+	  /* exclude */
+	  return NO;
+	}
+      }
+    }
+
+    if(i == n_addrs && sfConfig.agentIPFilter.type)
+      return NO;
+  }
+
+  return YES;
 }
 
 /*_________________---------------------------__________________
@@ -5654,6 +5694,41 @@ static int parseOrResolveAddress(char *name, struct sockaddr *sa, SFLAddress *ad
 }
 
 /*_________________---------------------------__________________
+  _________________     parseAgentIPFilter    __________________
+  -----------------___________________________------------------
+*/
+
+static void parseAgentIPFilter(SFAgentIPFilterList *aipf, char *start)
+{
+  char *p = start;
+  char *sep = " ,";
+  int i = 0;
+
+  do {
+    p = strtok(p, sep);
+    if(!p) {
+      if(i) {
+        aipf->n_addrs = i;
+        break;
+      }
+      fprintf(ERROUT, "missing Agent IP list\n");
+      exit(-21);
+    }
+    if(i >= FILTER_MAX_AGENTIP) {
+      fprintf(ERROUT, "no more than %d Agent IP's supported\n",
+              FILTER_MAX_AGENTIP);
+      exit(-22);
+    }
+    if(parseOrResolveAddress(p, NULL, &aipf->addrs[i], 0, 1) == NO) {
+      fprintf(ERROUT, "failed to parse Agent IP %s\n", p);
+      exit(-23);
+    }
+    p = NULL;
+    i++;
+  } while(1);
+}
+
+/*_________________---------------------------__________________
   _________________   addForwardingTarget     __________________
   -----------------___________________________------------------
   return boolean for success or failure
@@ -5808,6 +5883,8 @@ static void instructions(char *command)
   fprintf(ERROUT,"Filters:\n");
   fprintf(ERROUT, "   +v <vlans>         -  include vlans (e.g. +v 0-20,4091)\n");
   fprintf(ERROUT, "   -v <vlans>         -  exclude vlans\n");
+  fprintf(ERROUT, "   +a <ip>            -  samples from given agent IP only\n");
+  fprintf(ERROUT, "   -a <ip>            -  samples all but given agent IP\n");
   fprintf(ERROUT, "   -4                 -  listen on IPv4 socket only\n");
   fprintf(ERROUT, "   -6                 -  listen on IPv6 socket only\n");
   fprintf(ERROUT, "   +4                 -  listen on both IPv4 and IPv6 sockets\n");
@@ -5877,6 +5954,7 @@ static void process_command_line(int argc, char *argv[])
     case 'c':
     case 'd':
     case 'f':
+    case 'a':
     case 'N':
     case 'v': if(arg < argc) break;
     default: instructions(*argv); exit(1);
@@ -5931,6 +6009,19 @@ static void process_command_line(int argc, char *argv[])
     case 'f':
       if(addForwardingTarget(argv[arg++]) == NO) exit(-35);
       sfConfig.outputFormat = SFLFMT_FWD;
+      break;
+    case 'a':
+      if(sfConfig.gotAgentIPFilter && sfConfig.agentIPFilter.type != plus) {
+	fprintf(ERROUT,
+		"agent IP filter type is \"%slude\": not \"%slude\"\n",
+		sfConfig.agentIPFilter.type ? "inc" : "exc",
+		plus ? "inc" : "exc");
+	exit(-5);
+      }
+      /* +a/-a include/exclude agent IP list */
+      parseAgentIPFilter(&sfConfig.agentIPFilter, argv[arg++]);
+      sfConfig.agentIPFilter.type = plus;
+      sfConfig.sampleFiltering = sfConfig.gotAgentIPFilter = YES;
       break;
     case 'v':
       if(plus) {
