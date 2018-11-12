@@ -247,6 +247,9 @@ typedef struct _SFConfig {
   SFForwardingTarget *forwardingTargets;
   SFForwardingTarget6 *forwardingTargets6;
 
+  /* Filtering */
+  int sampleFiltering;
+
   /* vlan filtering */
   int gotVlanFilter;
 #define FILTER_MAX_VLAN 4096
@@ -360,7 +363,6 @@ typedef struct _SFSample {
     uint32_t internalPriority;
     uint32_t out_vlan;
     uint32_t out_priority;
-    int vlanFilterReject;
 
     /* extended data fields */
     uint32_t num_extended;
@@ -1126,6 +1128,9 @@ char *URLEncode(char *in, char *out, int outlen)
 
 int sampleFilterOK(SFSample *sample)
 {
+  if(sfConfig.sampleFiltering == NO) {
+      return YES;
+  }
   /* the vlan filter will only reject a sample if both in_vlan and out_vlan are rejected. If the
      vlan was not reported in an SFLExtended_Switch struct, but was only picked up from the 802.1q header
      then the out_vlan will be 0,  so to be sure you are rejecting vlan 1,  you may need to reject both
@@ -5102,42 +5107,16 @@ static void readSFlowDatagram(SFSample *sample)
 
 static void receiveSFlowDatagram(SFSample *sample)
 {
-  if(sfConfig.forwardingTargets || sfConfig.forwardingTargets6) {
-    /* if we are forwarding, then do nothing else (it might
-       be important from a performance point of view). */
-    SFForwardingTarget *tgt = sfConfig.forwardingTargets;
-    for( ; tgt != NULL; tgt = tgt->nxt) {
-      int bytesSent;
-      if((bytesSent = sendto(tgt->sock,
-			     (const char *)sample->rawSample,
-			     sample->rawSampleLen,
-			     0,
-			     (struct sockaddr *)(&tgt->addr),
-			     sizeof(tgt->addr))) != sample->rawSampleLen) {
-	fprintf(ERROUT, "sendto returned %d (expected %d): %s\n",
-		bytesSent,
-		sample->rawSampleLen,
-		strerror(errno));
-      }
-    }
-    SFForwardingTarget6 *tgt6 = sfConfig.forwardingTargets6;
-    for( ; tgt6 != NULL; tgt6 = tgt6->nxt) {
-      int bytesSent;
-      if((bytesSent = sendto(tgt6->sock,
-			     (const char *)sample->rawSample,
-			     sample->rawSampleLen,
-			     0,
-			     (struct sockaddr *)(&tgt6->addr),
-			     sizeof(tgt6->addr))) != sample->rawSampleLen) {
-	fprintf(ERROUT, "sendto returned %d (expected %d): %s\n",
-		bytesSent,
-		sample->rawSampleLen,
-		strerror(errno));
-      }
-    }
-  }
-  else {
-    int exceptionVal;
+  SFForwardingTarget *tgt = sfConfig.forwardingTargets;
+  SFForwardingTarget6 *tgt6 = sfConfig.forwardingTargets6;
+  int bytesSent, exceptionVal, forwardingOnly;
+
+  forwardingOnly = sfConfig.outputFormat == SFLFMT_FWD &&
+                   sfConfig.sampleFiltering == NO;
+
+  /* if we are forwarding and do nothing else (it might
+     be important from a performance point of view). */
+  if(!forwardingOnly) {
     sample->readTimestamp = (long)time(NULL);
     if(sfConfig.outputFormat == SFLFMT_JSON) {
       sfConfig.jsonStart = YES;
@@ -5177,6 +5156,36 @@ static void receiveSFlowDatagram(SFSample *sample)
     else if(sfConfig.outputFormat == SFLFMT_LINE_CUSTOM) {
       /* clear datagram-scoped field values */
       clearLineCustom(sample, SFSCOPE_DATAGRAM);
+    }
+  }
+
+  for( ; tgt != NULL; tgt = tgt->nxt) {
+    bytesSent = sendto(tgt->sock,
+		       (const char *)sample->rawSample,
+		       sample->rawSampleLen,
+		       0,
+		       (struct sockaddr *)(&tgt->addr),
+		       sizeof(tgt->addr));
+    if(bytesSent != sample->rawSampleLen) {
+      fprintf(ERROUT, "sendto returned %d (expected %d): %s\n",
+	      bytesSent,
+	      sample->rawSampleLen,
+	      strerror(errno));
+    }
+  }
+
+  for( ; tgt6 != NULL; tgt6 = tgt6->nxt) {
+    bytesSent = sendto(tgt6->sock,
+		       (const char *)sample->rawSample,
+		       sample->rawSampleLen,
+		       0,
+		       (struct sockaddr *)(&tgt6->addr),
+		       sizeof(tgt6->addr));
+    if(bytesSent != sample->rawSampleLen) {
+      fprintf(ERROUT, "sendto returned %d (expected %d): %s\n",
+		bytesSent,
+		sample->rawSampleLen,
+		strerror(errno));
     }
   }
 }
@@ -5938,6 +5947,7 @@ static void process_command_line(int argc, char *argv[])
 	}
 	parseVlanFilter(sfConfig.vlanFilter, NO, argv[arg++]);
       }
+      sfConfig.sampleFiltering = YES;
       break;
     case '4':
       sfConfig.listenControlled = YES;
