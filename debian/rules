@@ -1,0 +1,23 @@
+#!/usr/bin/make -f
+
+#export DH_VERBOSE=1
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+%:
+	dh $@ --with autoreconf,systemd
+
+# we may not want to run dh_auto_test
+override_dh_auto_test:
+
+override_dh_auto_install:
+	dh_auto_install
+	# append Debian's tmpfiles conf to upstream's on Linux (systemd)
+ifeq ($(DEB_HOST_ARCH_OS), linux)
+	install -Dpm0644 debian/sflowtool.conf $(CURDIR)/debian/sflowtool/usr/lib/tmpfiles.d/sflowtool.conf
+endif
+
+override_dh_installinit:
+	dh_installinit --no-start -- defaults 16 80
+
+override_dh_installsystemd:
+	dh_installsystemd --restart-after-upgrade

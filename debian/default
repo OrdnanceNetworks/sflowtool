@@ -1,0 +1,8 @@
+# If you're running systemd, changing this variable will
+# require running "systemctl daemon-reload" followed by
+# a restart of the sflowtool service (if you removed entries
+# you may have to stop those manually)
+#
+#AUTOSTART="instance1"
+#AUTOSTART="none"
+#AUTOSTART="instance1 instance2"

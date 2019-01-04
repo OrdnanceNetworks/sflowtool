@@ -1,0 +1,26 @@
+Source: sflowtool
+Section: net
+Priority: optional
+Maintainer: Sergey Popovich <sergey.popovich@ordnance.co>
+Build-Depends:
+ debhelper (>= 9),
+ dh-systemd,
+ dpkg-dev (>= 1.16.1),
+ pkg-config,
+Standards-Version: 5.02
+Homepage: https://github.com/sflow/sflowtool
+Vcs-Git: https://github.com/sflow/sflowtool.git
+Vcs-Browser: https://github.com/sflow/sflowtool
+
+Package: sflowtool
+Architecture: any
+Depends:
+ ${shlibs:Depends},
+ ${misc:Depends},
+Description: Print binary sFlow feed to ASCII or forward to controllers
+  The sFlow toolkit provides command line utilities and scripts for analyzing
+  sFlow data. sflowtool interfaces to utilities such as tcpdump, Wireshark and Snort
+  for detailed packet tracing and analysis, NetFlow compatible collectors for IP
+  flow accounting, and provides text based output that can be used in scripts to
+  provide customized analysis and reporting and for integrating with other tools
+  such as Graphite or rrdtool.

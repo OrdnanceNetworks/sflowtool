@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# This systemd generator creates dependency symlinks that make all sflowtool
+# instances listed in /etc/default/sflowtool AUTOSTART be started/stopped/reloaded
+# when sflowtool.service is started/stopped/reloaded.
+
+set -eu
+
+GENDIR="$1"
+WANTDIR="$1/sflowtool.service.wants"
+SERVICEFILE="/lib/systemd/system/sflowtool@.service"
+AUTOSTART="all"
+CONFIG_DIR=/etc/sflowtool
+
+mkdir -p "$WANTDIR"
+
+if test -e /etc/default/sflowtool ; then
+	. /etc/default/sflowtool
+fi
+
+# No sflowtool(s) automatically started
+if test "x$AUTOSTART" = "xnone" ; then
+	exit 0
+fi
+
+if test "x$AUTOSTART" = "xall" -o -z "$AUTOSTART" ; then
+	for CONFIG in `cd $CONFIG_DIR; ls *.conf 2> /dev/null`; do
+		NAME=${CONFIG%%.conf}
+		ln -s "$SERVICEFILE" "$WANTDIR/sflowtool@$NAME.service"
+	done
+else
+	for NAME in $AUTOSTART ; do
+		if test -e $CONFIG_DIR/$NAME.conf ; then
+			ln -s "$SERVICEFILE" "$WANTDIR/sflowtool@$NAME.service"
+		fi
+	done
+fi
+
+exit 0
+

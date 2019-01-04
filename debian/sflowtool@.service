@@ -1,0 +1,25 @@
+[Unit]
+Description=sFlow Tool instance %i
+PartOf=sflowtool.service
+ReloadPropagatedFrom=sflowtool.service
+Before=systemd-user-sessions.service
+After=network-online.target
+Wants=network-online.target
+Documentation=file:///README
+Documentation=https://github.com/sflow/sflowtool
+
+[Service]
+Type=simple
+PrivateTmp=true
+WorkingDirectory=/etc/sflowtool
+EnvironmentFile=/etc/sflowtool/%i.conf
+ExecStart=/usr/bin/sflowtool $OPTARGS
+PIDFile=/run/sflowtool/%i.pid
+KillMode=process
+ProtectSystem=true
+ProtectHome=true
+RestartSec=5s
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

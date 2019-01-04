@@ -1,0 +1,4 @@
+etc/sflowtool
+usr/bin
+usr/share/doc/sflowtool
+var/log/sflowtool

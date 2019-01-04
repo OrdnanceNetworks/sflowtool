@@ -1,0 +1,5 @@
+sflowtool (5.02-1) unstable; urgency=low
+
+  * Initial release. (Closes: #123456)
+
+ -- Sergey Popovich <sergey.popovich@ordnance.co>  Fri, 04 Jan 2019 14:47:27 +0200

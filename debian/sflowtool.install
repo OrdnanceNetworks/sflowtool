@@ -1,0 +1,5 @@
+debian/sflowtool@.service lib/systemd/system
+debian/sflowtool.service lib/systemd/system
+debian/sflowtool-generator lib/systemd/system-generators
+debian/instance1.conf etc/sflowtool/
+debian/instance2.conf etc/sflowtool/
